@@ -1,0 +1,7 @@
+[2025-09-09T06:43:06.362Z] INFO: Signup attempt with existing mobile: 6291152083
+[2025-09-09T06:43:21.533Z] INFO: New user registered: bikrambera342@gmail.com
+[2025-09-09T07:10:15.931Z] INFO: New user registered: animeshsahoo342@gmail.com
+[2025-09-10T23:27:33.941Z] WARN: Login failed - user not found: sidhyaashutosh@gmail.com
+[2025-09-10T23:28:08.455Z] ERROR: Signup error: User validation failed: profile.lastName: Path `profile.lastName` is required.
+[2025-09-10T23:28:49.642Z] INFO: New user registered: sidhyaashutosh@gmail.com
+[2025-09-10T23:29:21.353Z] INFO: User logged in: sidhyaashutosh@gmail.com
