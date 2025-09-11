@@ -1,155 +1,144 @@
 "use client";
 
-import { MicIcon, PlusIcon, SendIcon } from "lucide-react";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputToolbar,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+import { Action, Actions } from "@/components/ai-elements/actions";
 import React, { useState } from "react";
-import { Button } from "../../components/ui/button";
-import { Card, CardContent } from "../../components/ui/card";
-import { Input } from "../../components/ui/input";
-import { sendMedicalChat } from "../../services/meditronService";
+import { useChat } from "@ai-sdk/react";
+import { Response } from "@/components/ai-elements/response";
+import { CopyIcon } from "lucide-react";
+import {
+  Source,
+  Sources,
+  SourcesContent,
+  SourcesTrigger,
+} from "@/components/ai-elements/sources";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
+import { Loader } from "@/components/ai-elements/loader";
 
-const ChatAssistantPage = (): JSX.Element => {
-  const languages = ["Hindi", "Bengali", "Telugu", "Marathi", "Tamil", "English"];
-  const sampleQuestions = [
-    "I'm feeling mild fever since last night.",
-    "Can you suggest a diet for diabetes control?",
-    "I have a headache and low energy today.",
-    "What are the side effects of this medicine?",
-    "Can you remind me to take my BP tablets daily?",
-  ];
 
-  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
-  const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
-  const [input, setInput] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+const AIChat = () => {
+  const [input, setInput] = useState("");
+  const { messages, sendMessage, status } = useChat();
 
-  const handleSend = async () => {
-    const text = (input || selectedQuestion || "").trim();
-    if (!text || loading) return;
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
-    setSelectedQuestion(null);
+  const handleSubmit = () => {
+  if (input.trim()) {
+    sendMessage(
+      { text: input }
+    );
     setInput("");
-    setLoading(true);
-    try {
-      const data = await sendMedicalChat(text);
-      const reply = data?.response?.message || data?.error || "No response received from medical AI.";
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-    } catch (e: any) {
-      console.error("Chat error:", e);
-      const errorMsg = e.message || "Failed to connect to medical AI. Please check if the backend server is running.";
-      setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${errorMsg}` }]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }
+};
 
   return (
-    <div className="bg-[#cff2f1] min-h-screen w-full flex justify-center">
-      <div className="bg-[#cff2f1] w-full max-w-[1440px] relative overflow-hidden">
-        {/* gradient background */}
-        <div className="absolute w-full h-full -z-10">
-          <div className="absolute w-[1800px] h-[900px] top-[250px] left-[-400px] rounded-[900px/400px] rotate-[0.35deg] shadow-[0px_0px_200px_80px_#cff2f1] bg-[linear-gradient(180deg,rgba(207,242,241,0.5)_0%,rgba(84,237,239,0.5)_43%)]" />
-        </div>
-
-        {/* MAIN CONTENT */}
-        <main className="flex flex-col items-center px-4 sm:px-6 md:px-12 py-10 relative z-10">
-          <h1 className="text-2xl sm:text-3xl md:text-5xl font-medium text-black text-center mb-6 [font-family:'Outfit',Helvetica]">
-            How can we assist you today?
-          </h1>
-
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-medium text-black text-center mb-6 [font-family:'Outfit',Helvetica]">
-            Choose your language
-          </h2>
-
-          {/* language buttons */}
-          <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-10">
-            {languages.map((language, index) => (
-              <Button
-                key={index}
-                onClick={() => setSelectedLanguage(language)}
-                variant="ghost"
-                className={`px-6 py-3 rounded-lg text-base sm:text-lg md:text-xl shadow-md transition-colors 
-                  ${
-                    selectedLanguage === language
-                      ? "bg-[#4fd1c5] text-white"
-                      : "bg-white/40 text-black hover:bg-white/60"
-                  }`}
-              >
-                {language}
-              </Button>
+    <div className="max-w-4xl mx-auto p-6 relative size-full h-screen">
+      <div className="flex flex-col h-full">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map((message) => (
+              <div key={message.id}>
+                {message.role === "assistant" &&
+                  message.parts.filter((part) => part.type === "source-url")
+                    .length > 0 && (
+                    <Sources>
+                      <SourcesTrigger
+                        count={
+                          message.parts.filter(
+                            (part) => part.type === "source-url"
+                          ).length
+                        }
+                      />
+                      {message.parts
+                        .filter((part) => part.type === "source-url")
+                        .map((part, i) => (
+                          <SourcesContent key={`${message.id}-${i}`}>
+                            <Source
+                              key={`${message.id}-${i}`}
+                              href={part.url}
+                              title={part.url}
+                            />
+                          </SourcesContent>
+                        ))}
+                    </Sources>
+                  )}
+                {message.parts.map((part, i) => {
+                  switch (part.type) {
+                    case "text":
+                      return (
+                        <React.Fragment key={`${message.id}-${i}`}>
+                          <Message from={message.role}>
+                            <MessageContent>
+                              <Response>{part.text}</Response>
+                            </MessageContent>
+                          </Message>
+                          {message.role === "assistant" &&
+                            i === messages.length - 1 && (
+                              <Actions className="mt-2">
+                                <Action
+                                  onClick={() =>
+                                    navigator.clipboard.writeText(part.text)
+                                  }
+                                  label="Copy"
+                                >
+                                  <CopyIcon className="size-3" />
+                                </Action>
+                              </Actions>
+                            )}
+                        </React.Fragment>
+                      );
+                    case "reasoning":
+                      return (
+                        <Reasoning
+                          key={`${message.id}-${i}`}
+                          className="w-full"
+                          isStreaming={
+                            status === "streaming" &&
+                            i === message.parts.length - 1 &&
+                            message.id === messages.at(-1)?.id
+                          }
+                        >
+                          <ReasoningTrigger />
+                          <ReasoningContent>{part.text}</ReasoningContent>
+                        </Reasoning>
+                      );
+                    default:
+                      return null;
+                  }
+                })}
+              </div>
             ))}
-          </div>
+            {status === "submitted" && <Loader />}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
 
-          {/* input box */}
-          <div className="relative w-full max-w-[1062px] mb-8 px-2">
-            <div className="bg-white/60 rounded-xl shadow-md flex items-center px-4 py-3">
-              <Button variant="ghost" size="icon" className="h-auto p-2 mr-2">
-                <PlusIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-              </Button>
-
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSend();
-                }}
-                placeholder="Share your health concern here..."
-                className="flex-1 border-none bg-transparent text-base sm:text-lg md:text-xl font-normal text-black opacity-80 [font-family:'Outfit',Helvetica] placeholder:text-black placeholder:opacity-60 focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-
-              <div className="flex gap-2 sm:gap-4 ml-2">
-                <Button variant="ghost" size="icon" className="h-auto p-2">
-                  <MicIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-auto p-2" onClick={handleSend} disabled={loading}>
-                  <SendIcon className="w-5 h-5 sm:w-6 sm:h-6" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* sample questions */}
-          <Card className="w-full max-w-[900px] bg-white/70 shadow-md border-none">
-            <CardContent className="p-4 sm:p-6 md:p-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-base sm:text-lg md:text-xl font-medium text-black [font-family:'Outfit',Helvetica] leading-relaxed">
-                {sampleQuestions.map((question, index) => (
-                  <div
-                    key={index}
-                    onClick={() => {
-                      setSelectedQuestion(question);
-                      setInput(question);
-                    }}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                      selectedQuestion === question
-                        ? "bg-[#d1f7f6] text-black font-semibold"
-                        : "hover:bg-[#e6fafa]"
-                    }`}
-                  >
-                    {question}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* messages view */}
-          <div className="w-full max-w-[900px] mt-6">
-            <Card className="bg-white/70 shadow-md border-none">
-              <CardContent className="p-4 space-y-3">
-                {messages.map((m, i) => (
-                  <div key={i} className="text-black">
-                    <span className="font-semibold mr-2">{m.role === "user" ? "You" : "Assistant"}:</span>
-                    <span>{m.content}</span>
-                  </div>
-                ))}
-                {loading && <div className="text-black/70">Thinking…</div>}
-              </CardContent>
-            </Card>
-          </div>
-        </main>
+        <PromptInput onSubmit={handleSubmit} className="mt-4">
+          <PromptInputTextarea
+            onChange={(e) => setInput(e.target.value)}
+            value={input}
+          />
+          <PromptInputToolbar>
+            <PromptInputSubmit disabled={!input} status={status} />
+          </PromptInputToolbar>
+        </PromptInput>
       </div>
     </div>
   );
 };
 
-export default ChatAssistantPage;
+export default AIChat;

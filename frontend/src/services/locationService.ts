@@ -1,4 +1,5 @@
 "use client";
+import api from "../lib/api"; // [FIX] Using the central API client now
 
 export interface Location {
   latitude: number;
@@ -34,74 +35,19 @@ export interface Pharmacy {
 
 export class LocationService {
   static async getCurrentLocation(): Promise<Location> {
-    // Try browser geolocation first; on error or timeout, fall back to IP-based location
-    const geolocationPromise = new Promise<Location>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error("Geolocation is not supported by this browser."));
-        return;
+        return reject(new Error("Geolocation is not supported by this browser."));
       }
-
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        (error) => {
-          reject(new Error(`Geolocation error: ${error.message}`));
-        },
-        {
-          enableHighAccuracy: false, // avoid slow GPS on desktops; still accurate enough
-          timeout: 20000, // give more time before timing out
-          maximumAge: 300000, // 5 minutes cache
-        }
+        (position) => resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
+        (error) => reject(new Error(`Geolocation error: ${error.message}`)),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
       );
     });
-
-    try {
-      return await geolocationPromise;
-    } catch (geoError) {
-      // Fall back to IP geolocation
-      const ipLocation = await this.getLocationViaIP();
-      if (ipLocation) return ipLocation;
-      throw geoError instanceof Error ? geoError : new Error("Failed to get location");
-    }
-  }
-
-  private static async getLocationViaIP(): Promise<Location | null> {
-    try {
-      // Primary: ipapi.co (no key needed; subject to rate limits)
-      const res = await fetch("https://ipapi.co/json/");
-      if (res.ok) {
-        const data: any = await res.json();
-        if (typeof data?.latitude === "number" && typeof data?.longitude === "number") {
-          return { latitude: data.latitude, longitude: data.longitude };
-        }
-        // Some variants use lat/long keys
-        if (typeof data?.lat === "number" && typeof data?.lon === "number") {
-          return { latitude: data.lat, longitude: data.lon };
-        }
-      }
-    } catch (_) {}
-
-    try {
-      // Secondary: ipinfo.io (may be approximate; usually no key needed for dev)
-      const res2 = await fetch("https://ipinfo.io/json");
-      if (res2.ok) {
-        const data2: any = await res2.json();
-        if (typeof data2?.loc === "string") {
-          const [latStr, lngStr] = data2.loc.split(",");
-          const lat = parseFloat(latStr);
-          const lng = parseFloat(lngStr);
-          if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-            return { latitude: lat, longitude: lng };
-          }
-        }
-      }
-    } catch (_) {}
-
-    return null;
   }
 
   static calculateDistance(
@@ -111,169 +57,69 @@ export class LocationService {
     lon2: number
   ): number {
     const R = 6371; // Earth's radius in kilometers
-    const dLat = this.deg2rad(lat2 - lat1);
-    const dLon = this.deg2rad(lon2 - lon1);
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.deg2rad(lat1)) *
-        Math.cos(this.deg2rad(lat2)) *
+      Math.cos(lat1 * (Math.PI / 180)) *
+        Math.cos(lat2 * (Math.PI / 180)) *
         Math.sin(dLon / 2) *
         Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in kilometers
-  }
-
-  private static deg2rad(deg: number): number {
-    return deg * (Math.PI / 180);
+    return R * c;
   }
 
   static async getNearbyHospitals(
     location: Location,
-    radius: number = 10
+    radius: number = 10000 // radius in meters
   ): Promise<Hospital[]> {
     try {
-      // Try to fetch from backend API first
-      const response = await fetch(
-        `http://localhost:5001/api/hospitals/nearby?lat=${location.latitude}&lng=${location.longitude}&radius=${radius}`
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.hospitals) {
-          return data.hospitals;
+      // [FIX] Using the central 'api' client to make an authenticated request to the correct backend endpoint.
+      const response = await api.get('/hospitals/nearby', {
+        params: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          radius,
         }
+      });
+
+      if (response.data.success) {
+        return response.data.data.map((hospital: any) => ({
+          ...hospital,
+          id: hospital._id,
+          address: hospital.address?.street || 'Address not available',
+          latitude: hospital.location.coordinates[1],
+          longitude: hospital.location.coordinates[0],
+          distance: this.calculateDistance(
+            location.latitude,
+            location.longitude,
+            hospital.location.coordinates[1],
+            hospital.location.coordinates[0]
+          )
+        })).sort((a: Hospital, b: Hospital) => (a.distance || 0) - (b.distance || 0));
       }
+      throw new Error(response.data.message || 'Failed to fetch hospitals');
     } catch (error) {
-      console.warn('Backend API unavailable, using fallback data:', error);
+      console.error('Failed to fetch hospitals from backend, falling back to mock data:', error);
+      return []; // Return empty array on failure
     }
-
-    // Fallback to mock data if backend is unavailable
-    const mockHospitals: Hospital[] = [
-      {
-        id: "1",
-        name: "Apollo Hospital",
-        address: "123 Medical District, City Center",
-        phone: "+1-555-0123",
-        rating: 4.5,
-        latitude: location.latitude + 0.01,
-        longitude: location.longitude + 0.01,
-        specialties: ["Emergency", "Cardiology", "Neurology"],
-        emergency: true,
-        website: "https://apollohospital.com",
-      },
-      {
-        id: "2",
-        name: "City General Hospital",
-        address: "456 Health Street, Downtown",
-        phone: "+1-555-0456",
-        rating: 4.2,
-        latitude: location.latitude - 0.005,
-        longitude: location.longitude + 0.015,
-        specialties: ["General Medicine", "Pediatrics"],
-        emergency: true,
-        website: "https://citygeneral.com",
-      },
-      {
-        id: "3",
-        name: "Metro Medical Center",
-        address: "789 Care Avenue, Suburb",
-        phone: "+1-555-0789",
-        rating: 4.7,
-        latitude: location.latitude + 0.02,
-        longitude: location.longitude - 0.01,
-        specialties: ["Orthopedics", "Surgery", "Emergency"],
-        emergency: true,
-        website: "https://metromedical.com",
-      },
-    ];
-
-    // Calculate distances and filter by radius
-    const hospitalsWithDistance = mockHospitals.map((hospital) => ({
-      ...hospital,
-      distance: this.calculateDistance(
-        location.latitude,
-        location.longitude,
-        hospital.latitude,
-        hospital.longitude
-      ),
-    }));
-
-    return hospitalsWithDistance
-      .filter((hospital) => hospital.distance! <= radius)
-      .sort((a, b) => a.distance! - b.distance!);
   }
 
   static async getNearbyPharmacies(
     location: Location,
-    radius: number = 5
+    radius: number = 5000
   ): Promise<Pharmacy[]> {
-    try {
-      // Try to fetch from backend API first
-      const response = await fetch(
-        `http://localhost:5001/api/pharmacies/nearby?lat=${location.latitude}&lng=${location.longitude}&radius=${radius}`
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.pharmacies) {
-          return data.pharmacies;
-        }
-      }
-    } catch (error) {
-      console.warn('Backend API unavailable, using fallback data:', error);
-    }
-
-    // Fallback to mock data if backend is unavailable
-    const mockPharmacies: Pharmacy[] = [
-      {
-        id: "1",
-        name: "HealthPlus Pharmacy",
-        address: "321 Medicine Lane, City Center",
-        phone: "+1-555-0321",
-        rating: 4.3,
-        latitude: location.latitude + 0.008,
-        longitude: location.longitude + 0.005,
-        open24Hours: true,
-        website: "https://healthplus.com",
-      },
-      {
-        id: "2",
-        name: "QuickCare Pharmacy",
-        address: "654 Drug Street, Downtown",
-        phone: "+1-555-0654",
-        rating: 4.1,
-        latitude: location.latitude - 0.003,
-        longitude: location.longitude + 0.012,
-        open24Hours: false,
-        website: "https://quickcare.com",
-      },
-      {
-        id: "3",
-        name: "24/7 Meds",
-        address: "987 Prescription Road, Suburb",
-        phone: "+1-555-0987",
-        rating: 4.6,
-        latitude: location.latitude + 0.015,
-        longitude: location.longitude - 0.008,
-        open24Hours: true,
-        website: "https://24meds.com",
-      },
-    ];
-
-    // Calculate distances and filter by radius
-    const pharmaciesWithDistance = mockPharmacies.map((pharmacy) => ({
-      ...pharmacy,
-      distance: this.calculateDistance(
-        location.latitude,
-        location.longitude,
-        pharmacy.latitude,
-        pharmacy.longitude
-      ),
-    }));
-
-    return pharmaciesWithDistance
-      .filter((pharmacy) => pharmacy.distance! <= radius)
-      .sort((a, b) => a.distance! - b.distance!);
+     // NOTE: The backend does not currently have a dedicated pharmacy endpoint.
+     // This service will use mock data as a fallback.
+     console.warn('Backend pharmacy endpoint is not implemented. Using mock data.');
+     
+     const mockPharmacies: Pharmacy[] = [
+         { id: "1", name: "Mock HealthPlus Pharmacy", address: "321 Medicine Lane, City Center", rating: 4.3, latitude: location.latitude + 0.008, longitude: location.longitude + 0.005, open24Hours: true },
+         { id: "2", name: "Mock QuickCare Pharmacy", address: "654 Drug Street, Downtown", rating: 4.1, latitude: location.latitude - 0.003, longitude: location.longitude + 0.012, open24Hours: false },
+     ];
+     return mockPharmacies.map(p => ({ ...p, distance: this.calculateDistance(location.latitude, location.longitude, p.latitude, p.longitude) }))
+        .filter(p => p.distance! <= radius / 1000)
+        .sort((a, b) => a.distance! - b.distance!);
   }
 
   static getGoogleMapsUrl(latitude: number, longitude: number): string {

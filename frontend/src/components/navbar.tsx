@@ -57,12 +57,12 @@ export default function Navbar() {
             FAQ
           </Link>
           <Link
-            href="/about"
+            href="/chatassistant"
             className={`text-black font-medium hover:text-gray-700 ${
-              isActive("/about") ? "underline decoration-2 underline-offset-2" : ""
+              isActive("/chatassistant") ? "underline decoration-2 underline-offset-2" : ""
             }`}
           >
-            About
+            Chat
           </Link>
           
           {user ? (

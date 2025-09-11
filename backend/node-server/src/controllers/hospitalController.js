@@ -29,7 +29,16 @@ exports.getHospitalById = async (req, res) => {
 // GET /api/hospitals/nearby
 exports.getNearbyHospitals = async (req, res) => {
     try {
-        const { latitude, longitude, radius = 5000 } = req.query; // radius in meters, default 5km
+        const { latitude, longitude, radius = 10000 } = req.query; // default 10km
+
+        // [FIX] Add validation to ensure latitude and longitude are provided and are valid numbers.
+        if (!latitude || !longitude || isNaN(parseFloat(latitude)) || isNaN(parseFloat(longitude))) {
+            logger.warn('Bad request for nearby hospitals with invalid coordinates:', req.query);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid or missing latitude/longitude query parameters.'
+            });
+        }
         
         const hospitals = await Hospital.find({
             location: {
@@ -49,6 +58,7 @@ exports.getNearbyHospitals = async (req, res) => {
         res.status(500).json({ success: false, message: 'Error fetching nearby hospitals' });
     }
 };
+
 
 // POST /api/hospitals
 exports.createHospital = async (req, res) => {

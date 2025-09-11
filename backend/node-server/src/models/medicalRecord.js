@@ -1,17 +1,38 @@
 const mongoose = require('mongoose');
 
-const emergencyContactSchema = new mongoose.Schema({
+const medicalRecordSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  name: { type: String, required: true },
-  phone: { type: String, required: true },
-  relationship: { type: String },
-  isPrimary: { type: Boolean, default: false }
+  recordType: {
+    type: String,
+    enum: ['diagnosis', 'prescription', 'lab_report', 'note'],
+    required: true
+  },
+  title: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  dateOfRecord: {
+    type: Date,
+    default: Date.now
+  },
+  practitionerName: {
+    type: String,
+    trim: true
+  },
+  filePath: {
+    type: String // Path to an encrypted file, if applicable
+  }
 }, {
   timestamps: true
 });
 
-module.exports = mongoose.model('EmergencyContact', emergencyContactSchema);
+module.exports = mongoose.model('MedicalRecord', medicalRecordSchema);

@@ -32,26 +32,22 @@ exports.signup = async (req, res) => {
 
     const { fullName, email, mobileNumber, password, confirmPassword } = req.body;
 
-    // Check if passwords match
     if (password !== confirmPassword) {
       return res.status(400).json({ error: 'Passwords do not match' });
     }
 
-    // Check if email already exists
     const existingEmail = await User.findOne({ email });
     if (existingEmail) {
       logger.info(`Signup attempt with existing email: ${email}`);
       return res.status(409).json({ error: 'Email already in use' });
     }
 
-    // Check if mobile number already exists
     const existingMobile = await User.findOne({ mobileNumber });
     if (existingMobile) {
       logger.info(`Signup attempt with existing mobile: ${mobileNumber}`);
       return res.status(409).json({ error: 'Mobile number already in use' });
     }
 
-    // Split full name into first and last name
     const nameParts = fullName.trim().split(' ');
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
@@ -72,7 +68,9 @@ exports.signup = async (req, res) => {
     const token = generateToken(newUser);
 
     logger.info(`New user registered: ${email}`);
+    // [FIX] Added 'success: true' to the response object
     return res.status(201).json({
+      success: true,
       message: 'Signup successful',
       token,
       user: {
@@ -85,7 +83,7 @@ exports.signup = async (req, res) => {
     });
   } catch (error) {
     logger.error(`Signup error: ${error.message}`);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
@@ -94,26 +92,27 @@ exports.login = async (req, res) => {
   try {
     const { emailOrMobile, password } = req.body;
 
-    // Check if input is email or mobile number
     const isEmail = emailOrMobile.includes('@');
     const query = isEmail ? { email: emailOrMobile } : { mobileNumber: emailOrMobile };
 
     const user = await User.findOne(query);
     if (!user) {
       logger.warn(`Login failed - user not found: ${emailOrMobile}`);
-      return res.status(404).json({ error: 'Invalid email/mobile or password' });
+      return res.status(404).json({ success: false, error: 'Invalid email/mobile or password' });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       logger.warn(`Login failed - incorrect password: ${emailOrMobile}`);
-      return res.status(401).json({ error: 'Invalid email/mobile or password' });
+      return res.status(401).json({ success: false, error: 'Invalid email/mobile or password' });
     }
 
     const token = generateToken(user);
 
     logger.info(`User logged in: ${emailOrMobile}`);
+    // [FIX] Added 'success: true' to the response object
     return res.status(200).json({
+      success: true,
       message: 'Login successful',
       token,
       user: {
@@ -126,7 +125,7 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     logger.error(`Login error: ${error.message}`);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
@@ -135,13 +134,13 @@ exports.getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    return res.status(200).json({ user });
+    return res.status(200).json({ success: true, user });
   } catch (error) {
     logger.error(`Profile fetch error: ${error.message}`);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
@@ -156,19 +155,17 @@ exports.updateProfile = async (req, res) => {
     const { fullName, email, mobileNumber, location } = req.body;
     const userId = req.user.id;
 
-    // Check if email is being changed and if it already exists
     if (email) {
       const existingEmail = await User.findOne({ email, _id: { $ne: userId } });
       if (existingEmail) {
-        return res.status(409).json({ error: 'Email already in use' });
+        return res.status(409).json({ success: false, error: 'Email already in use' });
       }
     }
 
-    // Check if mobile number is being changed and if it already exists
     if (mobileNumber) {
       const existingMobile = await User.findOne({ mobileNumber, _id: { $ne: userId } });
       if (existingMobile) {
-        return res.status(409).json({ error: 'Mobile number already in use' });
+        return res.status(409).json({ success: false, error: 'Mobile number already in use' });
       }
     }
 
@@ -185,16 +182,17 @@ exports.updateProfile = async (req, res) => {
     ).select('-password');
 
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
 
     logger.info(`Profile updated for user: ${user.email}`);
     return res.status(200).json({
+      success: true,
       message: 'Profile updated successfully',
       user
     });
   } catch (error) {
     logger.error(`Profile update error: ${error.message}`);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
